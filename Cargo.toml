@@ -1,0 +1,6 @@
+[package]
+name = "mish-rpg"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
