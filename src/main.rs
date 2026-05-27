@@ -20,6 +20,7 @@ trait DiscoveredName {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 struct BuildingId(&'static str);
+#[derive(Clone, Copy)]
 struct Building {
     name: &'static str,
     name_discovered: bool,
@@ -37,6 +38,7 @@ impl DiscoveredName for Building {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 struct RoomId(&'static str);
+#[derive(Clone)]
 struct Room {
     name: &'static str,
     name_discovered: bool,
@@ -75,47 +77,56 @@ impl World {
     }
 }
 
-struct Game {
+struct GameState {
     current_building: BuildingId,
     current_room: RoomId,
     messages: Vec<Message>,
+}
+
+impl GameState {
+    fn enter_room(&mut self, room: RoomId) {
+        self.current_room = room;
+        self.messages.push(Message::EnteredRoom(room));
+    }
+}
+
+struct Game {
+    state: GameState,
     world: World,
 }
 
 impl Game {
     fn new(world: World) -> Self {
-        let first_building = world
-            .buildings
+        let buildings = world.buildings.clone();
+        let rooms = world.rooms.clone();
+        let first_building = buildings
             .keys()
             .next()
             .expect("there are no buildings in this world");
-        let first_room = world
-            .rooms
+        let first_room = rooms
             .keys()
             .next()
             .expect("there are no rooms in this world");
         Game {
-            current_building: first_building.clone(),
-            current_room: first_room.clone(),
-            messages: vec![],
             world,
+            state: GameState {
+                current_building: first_building.clone(),
+                current_room: first_room.clone(),
+                messages: vec![],
+            },
         }
     }
 
-    fn enter_room(&mut self, room: RoomId) {
-        self.current_room = room;
-        self.messages.push(Message::EnteredRoom(room));
-    }
     fn current_building(&self) -> &Building {
-        self.world.building(self.current_building)
+        self.world.building(self.state.current_building)
     }
     fn current_room(&self) -> &Room {
-        self.world.room(self.current_room)
+        self.world.room(self.state.current_room)
     }
 }
 
 fn ui(f: &mut Frame, game: &Game) {
-    let message_area_height: u16 = game.messages.len().try_into().unwrap_or(u16::MAX);
+    let message_area_height: u16 = game.state.messages.len().try_into().unwrap_or(u16::MAX);
     let [header_area, middle_area, message_area] = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -183,7 +194,7 @@ fn main() -> std::io::Result<()> {
         )]),
     });
 
-    game.enter_room(RoomId("wav_068"));
+    game.state.enter_room(RoomId("wav_068"));
 
     loop {
         terminal.draw(|f| ui(f, &game))?;
