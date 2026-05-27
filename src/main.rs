@@ -215,7 +215,13 @@ fn main() -> std::io::Result<()> {
         if let Event::Key(key) = event::read()? {
             game.push_msg(Message::Debug(format!("{:?}", key)));
             match key.code {
-                KeyCode::Char('q') => break,
+                // Exit on Ctrl+C or Shift+Q
+                KeyCode::Char('c') => {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        break;
+                    }
+                }
+                KeyCode::Char('Q') => break,
                 KeyCode::Char('W') => {
                     game.state.wok = !game.state.wok;
                     game.state.messages.push(Message::WokState(game.state.wok));
