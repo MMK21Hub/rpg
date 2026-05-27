@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use ratatui::{
     Frame,
     crossterm::{
@@ -15,10 +13,6 @@ use serde::{Deserialize, Serialize};
 
 const UNKNOWN: &'static str = "????";
 
-trait DiscoveredName {
-    fn name_as_discovered(&self) -> Option<&'static str>;
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum BuildingId {
     WavyTop,
@@ -31,10 +25,10 @@ impl BuildingId {
         }
     }
     fn name_as_discovered(&self, state: &GameState) -> Option<&'static str> {
-        // TODO use game state
-        match self {
-            BuildingId::WavyTop => None,
-            _ => Some(self.data().name),
+        if state.discovered_buildings.contains(self) {
+            Some(self.data().name)
+        } else {
+            None
         }
     }
 }
@@ -43,22 +37,7 @@ struct BuildingData {
     name: &'static str,
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct BuildingState {
-    name_discovered: bool,
-}
-
-// impl DiscoveredName for Building {
-//     fn name_as_discovered(&self) -> Option<&'static str> {
-//         if self.name_discovered {
-//             Some(self.name)
-//         } else {
-//             None
-//         }
-//     }
-// }
-
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum RoomId {
     WAV068,
 }
@@ -70,10 +49,10 @@ impl RoomId {
         }
     }
     fn name_as_discovered(&self, state: &GameState) -> Option<&'static str> {
-        // TODO use game state
-        match self {
-            RoomId::WAV068 => None,
-            _ => Some(self.data().name),
+        if state.discovered_rooms.contains(self) {
+            Some(self.data().name)
+        } else {
+            None
         }
     }
 }
@@ -92,6 +71,8 @@ enum Message {
 struct GameState {
     current_building: BuildingId,
     current_room: RoomId,
+    discovered_buildings: Vec<BuildingId>,
+    discovered_rooms: Vec<RoomId>,
     messages: Vec<Message>,
 }
 
@@ -112,6 +93,8 @@ impl Game {
             state: GameState {
                 current_building: BuildingId::WavyTop,
                 current_room: RoomId::WAV068,
+                discovered_buildings: vec![],
+                discovered_rooms: vec![],
                 messages: vec![],
             },
         }
