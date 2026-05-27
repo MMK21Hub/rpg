@@ -668,6 +668,7 @@ name = "mish-rpg"
 version = "0.0.0"
 dependencies = [
  "ratatui",
+ "serde",
 ]
 
 [[package]]

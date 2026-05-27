@@ -11,6 +11,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::Paragraph,
 };
+use serde::{Deserialize, Serialize};
 
 const UNKNOWN: &'static str = "????";
 
@@ -18,65 +19,76 @@ trait DiscoveredName {
     fn name_as_discovered(&self) -> Option<&'static str>;
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-struct BuildingId(&'static str);
-#[derive(Clone, Copy)]
-struct Building {
-    name: &'static str,
-    name_discovered: bool,
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+enum BuildingId {
+    WavyTop,
 }
 
-impl DiscoveredName for Building {
-    fn name_as_discovered(&self) -> Option<&'static str> {
-        if self.name_discovered {
-            Some(self.name)
-        } else {
-            None
+impl BuildingId {
+    fn data(&self) -> &BuildingData {
+        match self {
+            BuildingId::WavyTop => &BuildingData { name: "Wavy Top" },
+        }
+    }
+    fn name_as_discovered(&self, state: &GameState) -> Option<&'static str> {
+        // TODO use game state
+        match self {
+            BuildingId::WavyTop => None,
+            _ => Some(self.data().name),
         }
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-struct RoomId(&'static str);
-#[derive(Clone)]
-struct Room {
+struct BuildingData {
     name: &'static str,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct BuildingState {
     name_discovered: bool,
 }
 
-impl DiscoveredName for Room {
-    fn name_as_discovered(&self) -> Option<&'static str> {
-        if self.name_discovered {
-            Some(self.name)
-        } else {
-            None
+// impl DiscoveredName for Building {
+//     fn name_as_discovered(&self) -> Option<&'static str> {
+//         if self.name_discovered {
+//             Some(self.name)
+//         } else {
+//             None
+//         }
+//     }
+// }
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+enum RoomId {
+    WAV068,
+}
+
+impl RoomId {
+    fn data(&self) -> &RoomData {
+        match self {
+            RoomId::WAV068 => &RoomData { name: "WAV068" },
+        }
+    }
+    fn name_as_discovered(&self, state: &GameState) -> Option<&'static str> {
+        // TODO use game state
+        match self {
+            RoomId::WAV068 => None,
+            _ => Some(self.data().name),
         }
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+struct RoomData {
+    name: &'static str,
+}
+
+#[derive(Serialize, Deserialize)]
 enum Message {
     EnteredRoom(RoomId),
 }
 
-struct World {
-    buildings: HashMap<BuildingId, Building>,
-    rooms: HashMap<RoomId, Room>,
-}
-
-impl World {
-    fn building(&self, id: BuildingId) -> &Building {
-        self.buildings
-            .get(&id)
-            .unwrap_or_else(|| panic!("Missing BuildingId: {:?}", id))
-    }
-
-    fn room(&self, id: RoomId) -> &Room {
-        self.rooms
-            .get(&id)
-            .unwrap_or_else(|| panic!("Missing RoomId: {:?}", id))
-    }
-}
-
+#[derive(Serialize, Deserialize)]
 struct GameState {
     current_building: BuildingId,
     current_room: RoomId,
@@ -92,36 +104,24 @@ impl GameState {
 
 struct Game {
     state: GameState,
-    world: World,
 }
 
 impl Game {
-    fn new(world: World) -> Self {
-        let buildings = world.buildings.clone();
-        let rooms = world.rooms.clone();
-        let first_building = buildings
-            .keys()
-            .next()
-            .expect("there are no buildings in this world");
-        let first_room = rooms
-            .keys()
-            .next()
-            .expect("there are no rooms in this world");
+    fn new() -> Self {
         Game {
-            world,
             state: GameState {
-                current_building: first_building.clone(),
-                current_room: first_room.clone(),
+                current_building: BuildingId::WavyTop,
+                current_room: RoomId::WAV068,
                 messages: vec![],
             },
         }
     }
 
-    fn current_building(&self) -> &Building {
-        self.world.building(self.state.current_building)
+    fn current_building(&self) -> &BuildingData {
+        &self.state.current_building.data()
     }
-    fn current_room(&self) -> &Room {
-        self.world.room(self.state.current_room)
+    fn current_room(&self) -> &RoomData {
+        &self.state.current_room.data()
     }
 }
 
@@ -137,11 +137,11 @@ fn ui(f: &mut Frame, game: &Game) {
         .areas(f.area());
 
     let area_name = Span::styled("Loughborough", Color::Blue);
-    let building_name = match game.current_building().name_as_discovered() {
+    let building_name = match game.state.current_building.name_as_discovered(&game.state) {
         Some(name) => Span::styled(name, Color::Blue),
         None => Span::styled(UNKNOWN, Color::DarkGray),
     };
-    let room_name = match game.current_room().name_as_discovered() {
+    let room_name = match game.state.current_room.name_as_discovered(&game.state) {
         Some(name) => Span::styled(name, Color::Blue),
         None => Span::styled(UNKNOWN, Color::DarkGray),
     };
@@ -156,7 +156,7 @@ fn ui(f: &mut Frame, game: &Game) {
     f.render_widget(header, header_area);
 
     let room_style = Style::new().add_modifier(Modifier::UNDERLINED);
-    let room_name = match game.current_room().name_as_discovered() {
+    let room_name = match game.state.current_room.name_as_discovered(&game.state) {
         Some(name) => Span::styled(name, room_style.fg(Color::Blue)),
         None => Span::styled("a room", room_style.fg(Color::DarkGray)),
     };
@@ -177,24 +177,9 @@ fn main() -> std::io::Result<()> {
 
     let mut terminal = ratatui::init();
 
-    let mut game = Game::new(World {
-        buildings: HashMap::from([(
-            BuildingId("wavy_top"),
-            Building {
-                name: "Wavy Top",
-                name_discovered: false,
-            },
-        )]),
-        rooms: HashMap::from([(
-            RoomId("wav_068"),
-            Room {
-                name: "WAV068",
-                name_discovered: false,
-            },
-        )]),
-    });
+    let mut game = Game::new();
 
-    game.state.enter_room(RoomId("wav_068"));
+    game.state.enter_room(RoomId::WAV068);
 
     loop {
         terminal.draw(|f| ui(f, &game))?;
