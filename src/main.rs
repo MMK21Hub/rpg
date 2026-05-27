@@ -83,6 +83,25 @@ struct Game {
 }
 
 impl Game {
+    fn new(world: World) -> Self {
+        let first_building = world
+            .buildings
+            .keys()
+            .next()
+            .expect("there are no buildings in this world");
+        let first_room = world
+            .rooms
+            .keys()
+            .next()
+            .expect("there are no rooms in this world");
+        Game {
+            current_building: first_building.clone(),
+            current_room: first_room.clone(),
+            messages: vec![],
+            world,
+        }
+    }
+
     fn enter_room(&mut self, room: RoomId) {
         self.current_room = room;
         self.messages.push(Message::EnteredRoom(room));
@@ -147,29 +166,24 @@ fn main() -> std::io::Result<()> {
 
     let mut terminal = ratatui::init();
 
-    let mut game = Game {
-        current_building: BuildingId("wavy_top"),
-        current_room: RoomId("wav_068"),
-        messages: vec![],
-        world: World {
-            buildings: HashMap::from([(
-                BuildingId("wavy_top"),
-                Building {
-                    name: "Wavy Top",
-                    name_discovered: false,
-                },
-            )]),
-            rooms: HashMap::from([(
-                RoomId("wav_068"),
-                Room {
-                    name: "WAV068",
-                    name_discovered: false,
-                },
-            )]),
-        },
-    };
+    let mut game = Game::new(World {
+        buildings: HashMap::from([(
+            BuildingId("wavy_top"),
+            Building {
+                name: "Wavy Top",
+                name_discovered: false,
+            },
+        )]),
+        rooms: HashMap::from([(
+            RoomId("wav_068"),
+            Room {
+                name: "WAV068",
+                name_discovered: false,
+            },
+        )]),
+    });
 
-    game.messages.push(Message::EnteredRoom(game.current_room));
+    game.enter_room(RoomId("wav_068"));
 
     loop {
         terminal.draw(|f| ui(f, &game))?;
