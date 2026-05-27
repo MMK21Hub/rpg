@@ -1,10 +1,10 @@
 use ratatui::{
     Frame,
     crossterm::{
-        event::{self, Event, KeyCode},
+        event::{self, Event, KeyCode, KeyModifiers},
         terminal,
     },
-    layout::{Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
@@ -65,6 +65,9 @@ struct RoomData {
 #[derive(Serialize, Deserialize)]
 enum Message {
     EnteredRoom(RoomId),
+    WokState(bool),
+    Debug(String),
+    Log(String),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -74,6 +77,8 @@ struct GameState {
     discovered_buildings: Vec<BuildingId>,
     discovered_rooms: Vec<RoomId>,
     messages: Vec<Message>,
+    show_debug_msgs: bool,
+    wok: bool,
 }
 
 impl GameState {
@@ -96,8 +101,14 @@ impl Game {
                 discovered_buildings: vec![],
                 discovered_rooms: vec![],
                 messages: vec![],
+                wok: false, // Wok Off by default
+                show_debug_msgs: false,
             },
         }
+    }
+
+    fn push_msg(&mut self, message: Message) {
+        self.state.messages.push(message);
     }
 
     fn current_building(&self) -> &BuildingData {
@@ -108,14 +119,43 @@ impl Game {
     }
 }
 
+fn stringify_message<'a>(message: &'a Message, game_state: &'a GameState) -> Option<Line<'a>> {
+    match message {
+        Message::EnteredRoom(room) => {
+            let room_style = Style::new().add_modifier(Modifier::UNDERLINED);
+            let room_name = match room.name_as_discovered(game_state) {
+                Some(name) => Span::styled(name, room_style.fg(Color::Blue)),
+                None => Span::styled("a room", room_style.fg(Color::DarkGray)),
+            };
+            let room_text = Line::from(vec![
+                Span::raw("You find yourself in "),
+                room_name,
+                Span::raw("."),
+            ]);
+            Some(room_text)
+        }
+        Message::WokState(on) => Some(Line::from(vec![
+            Span::raw("Wok "),
+            Span::styled(if *on { "On" } else { "Off" }, Modifier::BOLD),
+        ])),
+        Message::Debug(text) => {
+            if game_state.show_debug_msgs {
+                Some(Line::styled(text, Color::DarkGray))
+            } else {
+                None
+            }
+        }
+        Message::Log(text) => Some(Line::raw(text)),
+    }
+}
+
 fn ui(f: &mut Frame, game: &Game) {
-    let message_area_height: u16 = game.state.messages.len().try_into().unwrap_or(u16::MAX);
     let [header_area, middle_area, message_area] = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
             Constraint::Min(1),
-            Constraint::Length(message_area_height),
+            Constraint::Min(1),
         ])
         .areas(f.area());
 
@@ -138,38 +178,58 @@ fn ui(f: &mut Frame, game: &Game) {
 
     f.render_widget(header, header_area);
 
-    let room_style = Style::new().add_modifier(Modifier::UNDERLINED);
-    let room_name = match game.state.current_room.name_as_discovered(&game.state) {
-        Some(name) => Span::styled(name, room_style.fg(Color::Blue)),
-        None => Span::styled("a room", room_style.fg(Color::DarkGray)),
-    };
-    let room_text = Line::from(vec![
-        Span::styled("> ", Color::DarkGray),
-        Span::raw("You find yourself in "),
-        room_name,
-        Span::raw("."),
-    ]);
+    // Render the lines bottom-aligned in chronological order, up to message_area.height lines
+    let message_lines: Vec<Line> = game
+        .state
+        .messages
+        .iter()
+        .filter_map(|msg| stringify_message(msg, &game.state))
+        .rev()
+        .take(message_area.height as usize)
+        .collect();
+    let mut lines_to_render: Vec<Line> = (0..message_area.height)
+        .map(|i| {
+            if let Some(line) = message_lines.get(i as usize) {
+                line.clone()
+            } else {
+                Line::default()
+            }
+        })
+        .collect();
+    lines_to_render.reverse();
+    let messages_paragraph = Paragraph::new(lines_to_render);
 
-    let paragraph = Paragraph::new(room_text);
-
-    f.render_widget(paragraph, message_area);
+    f.render_widget(&messages_paragraph, message_area);
 }
 
 fn main() -> std::io::Result<()> {
     terminal::enable_raw_mode()?;
-
     let mut terminal = ratatui::init();
 
+    // Let's get gayming
     let mut game = Game::new();
-
     game.state.enter_room(RoomId::WAV068);
 
     loop {
         terminal.draw(|f| ui(f, &game))?;
-
         if let Event::Key(key) = event::read()? {
-            if key.code == KeyCode::Char('q') {
-                break;
+            game.push_msg(Message::Debug(format!("{:?}", key)));
+            match key.code {
+                KeyCode::Char('q') => break,
+                KeyCode::Char('W') => {
+                    game.state.wok = !game.state.wok;
+                    game.state.messages.push(Message::WokState(game.state.wok));
+                }
+                KeyCode::Char('D') => {
+                    game.state.show_debug_msgs = !game.state.show_debug_msgs;
+                    let verb = if game.state.show_debug_msgs {
+                        "Shown"
+                    } else {
+                        "Hidden"
+                    };
+                    game.push_msg(Message::Debug(format!("{} debug messages", verb)));
+                }
+                _ => {}
             }
         }
     }
