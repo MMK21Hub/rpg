@@ -185,7 +185,6 @@ fn ui(f: &mut Frame, game: &Game) {
         .iter()
         .filter_map(|msg| stringify_message(msg, &game.state))
         .rev()
-        .take(message_area.height as usize)
         .collect();
     let mut lines_to_render: Vec<Line> = (0..message_area.height)
         .map(|i| {
@@ -196,6 +195,11 @@ fn ui(f: &mut Frame, game: &Game) {
             }
         })
         .collect();
+    if lines_to_render.len() > 1 && message_area.height < message_lines.len() as u16 {
+        // Indicate if there are some older lines that are being hidden
+        let ellipsis = Line::from(Span::styled("…", Color::DarkGray));
+        lines_to_render.push(ellipsis);
+    }
     lines_to_render.reverse();
     let messages_paragraph = Paragraph::new(lines_to_render);
 
